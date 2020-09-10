@@ -62,6 +62,8 @@ class Recipe(ConanFile):
         "wgl_version": "None"
     }
 
+    build_policy = 'missing'
+
     _source_subfolder = "src"
     _build_subfolder = "_build"
 
