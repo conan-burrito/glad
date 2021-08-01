@@ -62,16 +62,24 @@ class Recipe(ConanFile):
         "wgl_version": "None"
     }
 
-    build_policy = 'missing'
+    _cmake = None
 
-    _source_subfolder = "src"
-    _build_subfolder = "_build"
+    @property
+    def _source_subfolder(self):
+        return "src"
+
+    @property
+    def _build_subfolder(self):
+        return "_build"
 
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
 
     def configure(self):
+        if self.options.shared:
+            del self.options.fPIC
+
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
 
@@ -96,31 +104,34 @@ class Recipe(ConanFile):
                                                                                                   self.settings.os))
 
     def source(self):
-        tools.get(**self.conan_data["sources"][self.version])
-        extracted_dir = self.name + "-" + self.version
-        os.rename(extracted_dir, self._source_subfolder)
-        if "patches" in self.conan_data:
-            for patch in self.conan_data["patches"][self.version]:
-                tools.patch(**patch)
+        tools.get(**self.conan_data["sources"][self.version], destination=self._source_subfolder, strip_root=True)
 
     def build(self):
+        for patch in self.conan_data.get("patches", {}).get(self.version, []):
+            tools.patch(**patch)
+
         cmake = self._configure_cmake()
         cmake.build()
 
     def _configure_cmake(self):
-        cmake = CMake(self)
-        if "gl_profile" in self.options:
-            cmake.definitions["GLAD_PROFILE"] = self.options.gl_profile
-        cmake.definitions["GLAD_API"] = self._get_api()
-        cmake.definitions["GLAD_EXTENSIONS"] = self.options.extensions
-        cmake.definitions["GLAD_SPEC"] = self.options.spec
-        cmake.definitions["GLAD_NO_LOADER"] = self.options.no_loader
-        cmake.definitions["GLAD_GENERATOR"] = "c" if self.settings.build_type == "Release" else "c-debug"
-        cmake.definitions["GLAD_EXPORT"] = True
-        cmake.definitions["GLAD_INSTALL"] = True
+        if self._cmake:
+            return self._cmake
 
-        cmake.configure(build_folder=self._build_subfolder)
-        return cmake
+        self._cmake = CMake(self)
+
+        if "gl_profile" in self.options:
+            self._cmake.definitions["GLAD_PROFILE"] = self.options.gl_profile
+
+        self._cmake.definitions["GLAD_API"] = self._get_api()
+        self._cmake.definitions["GLAD_EXTENSIONS"] = self.options.extensions
+        self._cmake.definitions["GLAD_SPEC"] = self.options.spec
+        self._cmake.definitions["GLAD_NO_LOADER"] = self.options.no_loader
+        self._cmake.definitions["GLAD_GENERATOR"] = "c" if self.settings.build_type == "Release" else "c-debug"
+        self._cmake.definitions["GLAD_EXPORT"] = True
+        self._cmake.definitions["GLAD_INSTALL"] = True
+
+        self._cmake.configure(build_folder=self._build_subfolder)
+        return self._cmake
 
     def _get_api(self):
         if self.options.spec == "gl":
@@ -151,6 +162,8 @@ class Recipe(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = tools.collect_libs(self)
+        if self.options.shared:
+            self.cpp_info.defines = ["GLAD_GLAPI_EXPORT"]
         if self.settings.os == "Linux":
             self.cpp_info.system_libs.append("dl")
 

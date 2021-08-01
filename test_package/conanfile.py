@@ -12,8 +12,8 @@ class TestPackageConan(ConanFile):
         cmake.build()
 
     def test(self):
-        if tools.cross_building(self.settings):
-            return
-        
-        self.run(os.path.join('bin', 'test_package'), run_environment=True)
+        if not tools.cross_building(self.settings):
+            self.run(os.path.join('bin', 'test_package'), run_environment=True)
 
+        if self.settings.os == 'Emscripten':
+            self.run("node %s" % os.path.join("bin", "test_package"), run_environment=True)
